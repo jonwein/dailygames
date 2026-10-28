@@ -647,6 +647,12 @@
   document.addEventListener("visibilitychange", onReturn);
   window.addEventListener("pageshow", onReturn);
 
+  // Before multi-game pastes were rejected, a copied combined message could get saved as one game's result. Drop those.
+  for (const [id, text] of Object.entries(state.results)) {
+    if (detect(text) === "several") delete state.results[id];
+  }
+  save();
+
   render();
 </script>
 </body>
