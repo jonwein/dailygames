@@ -348,11 +348,14 @@
     return new RegExp(words.join("\\s*"), "i");
   }
 
-  // If several names match ("Tens" and "Daily Tens"), the longest one wins.
+  // Returns the matching game, null for no match, or "several" when the text names more than one game
+  // (usually the combined message copied back in). A shorter name inside a longer one doesn't count:
+  // "Wordless #50" also matches a game called "Wordle", but it's Wordless.
   function detect(text) {
     const hits = games.filter((g) => matcher(g.name).test(text)).sort((a, b) => b.name.length - a.name.length);
-    if (hits.length === 1 || (hits.length > 1 && hits[0].name.length > hits[1].name.length)) return hits[0];
-    return null;
+    if (!hits.length) return null;
+    const others = hits.slice(1).filter((g) => !matcher(g.name).test(hits[0].name));
+    return others.length ? "several" : hits[0];
   }
 
   function today() {
@@ -548,6 +551,7 @@
     if (state.stale.includes(text)) return toast("That's an old result. Tap Share in the game first.");
 
     const game = detect(text);
+    if (game === "several") return toast("That has more than one game's results. Tap Share in the game first.");
     if (game) return add(game, text);
     pickGame(text);
   }
@@ -606,8 +610,13 @@
     return cleaned || text;
   }
 
+  // One line per game: "DailyTens #120\n\n       1   ✅" → "DailyTens #120 1 ✅"
+  function oneLine(text) {
+    return text.replace(/\s+/g, " ").trim();
+  }
+
   $("#send").addEventListener("click", async () => {
-    const text = games.map((g) => state.results[g.id]).filter(Boolean).map(stripLinks).join("\n\n");
+    const text = games.map((g) => state.results[g.id]).filter(Boolean).map((r) => oneLine(stripLinks(r))).join("\n\n");
     if (!text) return;
     if (navigator.share) {
       try {
