@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Daily Games</title>
+<meta name="description" content="Open your daily games and combine your results into one message.">
+<meta property="og:title" content="Daily Games">
+<meta property="og:description" content="Open your daily games and combine your results into one message.">
+<meta property="og:image" content="https://jonwein.com/dailygames/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Daily Games">
 <meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16151a" media="(prefers-color-scheme: dark)">
@@ -18,7 +22,6 @@
     --accent: #e8590c;
     --accent-ink: #ffffff;
     --done: #2b8a3e;
-    --done-soft: #e6f4ea;
     --danger: #e03131;
     --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 6px 20px rgba(0, 0, 0, .04);
   }
@@ -32,7 +35,6 @@
       --accent: #ff7a2f;
       --accent-ink: #1a1208;
       --done: #69db7c;
-      --done-soft: #1f3324;
       --danger: #ff6b6b;
       --shadow: none;
     }
@@ -332,7 +334,7 @@
   function loadGames() {
     try {
       const g = JSON.parse(localStorage.getItem(GAMES_KEY));
-      if (Array.isArray(g)) return g;
+      if (Array.isArray(g)) return g.filter((x) => x && typeof x.name === "string" && x.name.trim() && typeof x.url === "string");
     } catch {}
     return DEFAULT_GAMES.map((g) => ({ ...g }));
   }
@@ -341,21 +343,19 @@
     try { localStorage.setItem(GAMES_KEY, JSON.stringify(games)); } catch {}
   }
 
-  // Share texts almost always include the game's name ("DailyTens #120", "Spotle.io #800"), so match on that,
-  // ignoring case and spaces between words.
+  // Share texts almost always include the game's name ("DailyTens #120", "Spotle.io #800"), so match on that
+  // as a whole word, ignoring case and spaces between words ("Wordle" doesn't match "Wordless").
   function matcher(name) {
     const words = name.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    return new RegExp(words.join("\\s*"), "i");
+    return new RegExp(`(?:^|[^\\p{L}\\p{N}])${words.join("\\s*")}(?![\\p{L}\\p{N}])`, "iu");
   }
 
-  // Returns the matching game, null for no match, or "several" when the text names more than one game
-  // (usually the combined message copied back in). A shorter name inside a longer one doesn't count:
-  // "Wordless #50" also matches a game called "Wordle", but it's Wordless.
+  // The matching game, or null when none or several match (then we ask). A name inside a longer matching
+  // name doesn't count: "Daily Tens #1" is Daily Tens, not a game called "Tens".
   function detect(text) {
     const hits = games.filter((g) => matcher(g.name).test(text)).sort((a, b) => b.name.length - a.name.length);
-    if (!hits.length) return null;
     const others = hits.slice(1).filter((g) => !matcher(g.name).test(hits[0].name));
-    return others.length ? "several" : hits[0];
+    return hits.length && !others.length ? hits[0] : null;
   }
 
   function today() {
@@ -377,6 +377,13 @@
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }
+
+  function checkDay() {
+    if (state.date === today()) return;
+    state = rollover(state);
+    save();
+    render();
   }
 
   let state = load();
@@ -467,7 +474,8 @@
     // Starter games that aren't on the list can be added back with one tap.
     const chips = $("#suggestions");
     chips.textContent = "";
-    for (const d of DEFAULT_GAMES.filter((d) => !games.some((g) => g.id === d.id))) {
+    const onList = (d) => games.some((g) => g.id === d.id || g.name.toLowerCase() === d.name.toLowerCase());
+    for (const d of DEFAULT_GAMES.filter((d) => !onList(d))) {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "chip";
@@ -505,12 +513,13 @@
     }
   }
 
-  // "lessgames.com/songless" → "Songless", "chainle.io" → "Chainle"
+  // "lessgames.com/songless" → "Songless", "chainle.io" → "Chainle", "globle-game.com/game" → "Globle Game"
+  const GENERIC_SEGMENT = /^(index(\.\w+)?|games?|play|daily|today|puzzles?|app|en|\d+)$/i;
   function nameFromUrl(href) {
     const u = new URL(href);
-    const seg = u.pathname.split("/").filter((s) => s && !/^index\.\w+$/i.test(s)).pop();
+    const seg = u.pathname.split("/").filter((s) => s && !GENERIC_SEGMENT.test(s)).pop();
     const base = (seg || u.hostname.replace(/^www\./, "").split(".")[0]).replace(/\.\w+$/, "");
-    return base.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return base.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
   }
 
   $("#add-form").addEventListener("submit", (e) => {
@@ -518,6 +527,7 @@
     const url = normalizeUrl($("#add-url").value);
     if (!url) return toast("That link doesn't look right.");
     const name = $("#add-name").value.trim() || nameFromUrl(url);
+    if (!name) return toast("Give it a name.");
     if (games.some((g) => g.name.toLowerCase() === name.toLowerCase())) return toast(`${name} is already on your list.`);
     games.push({ id: "g" + Date.now().toString(36), name, url });
     saveGames();
@@ -545,13 +555,20 @@
   }
 
   function handleText(raw) {
+    checkDay();
     const text = (raw || "").replace(/\r\n?/g, "\n").trim();
     if (!text) return toast("Clipboard is empty. Tap Share in the game first.");
-    if (Object.values(state.results).includes(text)) return toast("Already added. Tap Share in the next game first.");
-    if (state.stale.includes(text)) return toast("That's an old result. Tap Share in the game first.");
 
+    // Compare without links, since the combined message we send has them stripped. A paste that contains
+    // another game's saved result is the combined message copied back in, not a new result.
+    const bare = stripLinks(text);
+    const contains = (saved) => bare.includes(stripLinks(saved));
+    if (state.stale.some(contains)) return toast("That's an old result. Tap Share in the game first.");
     const game = detect(text);
-    if (game === "several") return toast("That has more than one game's results. Tap Share in the game first.");
+    const saved = games.filter((g) => state.results[g.id] && contains(state.results[g.id]));
+    if (saved.some((g) => stripLinks(state.results[g.id]) === bare)) return toast("Already added. Tap Share in the next game first.");
+    if (saved.some((g) => g !== game)) return toast("That's your combined message. Tap Share in the game first.");
+
     if (game) return add(game, text);
     pickGame(text);
   }
@@ -598,10 +615,12 @@
     btn.addEventListener("click", () => btn.closest("dialog").close());
   }
 
-  // Drop links from a result, along with lines left as just a label ("Play Today's Game: https://…" → gone).
+  // Drop links from a result, along with lines left as just a label ("Play Today's Game: https://…" → gone)
+  // and lines that are only a bare link ("lnkd.in/zip"). A domain inside a line ("Spotle.io #800") stays.
   function stripLinks(text) {
     const lines = [];
     for (const line of text.split("\n")) {
+      if (/^(?:[\w-]+\.)+[a-z]{2,}(?:\/\S*)?$/i.test(line.trim())) continue;
       const rest = line.replace(/\b(?:https?:\/\/|www\.)\S+/gi, "").replace(/[ \t]+$/, "");
       if (rest !== line.replace(/[ \t]+$/, "") && (!rest.trim() || /:$/.test(rest))) continue;
       lines.push(rest);
@@ -632,10 +651,7 @@
   // Coming back from a game: reset if the day changed, and nudge the Paste button.
   function onReturn() {
     if (document.visibilityState !== "visible") return;
-    if (state.date !== today()) {
-      state = rollover(state);
-      save();
-    }
+    checkDay();
     render();
     if (lastOpened && !state.results[lastOpened]) {
       const paste = $("#paste");
@@ -646,12 +662,6 @@
   }
   document.addEventListener("visibilitychange", onReturn);
   window.addEventListener("pageshow", onReturn);
-
-  // Before multi-game pastes were rejected, a copied combined message could get saved as one game's result. Drop those.
-  for (const [id, text] of Object.entries(state.results)) {
-    if (detect(text) === "several") delete state.results[id];
-  }
-  save();
 
   render();
 </script>
