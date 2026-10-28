@@ -610,13 +610,8 @@
     return cleaned || text;
   }
 
-  // One line per game: "DailyTens #120\n\n       1   ✅" → "DailyTens #120 1 ✅"
-  function oneLine(text) {
-    return text.replace(/\s+/g, " ").trim();
-  }
-
   $("#send").addEventListener("click", async () => {
-    const text = games.map((g) => state.results[g.id]).filter(Boolean).map((r) => oneLine(stripLinks(r))).join("\n\n");
+    const text = games.map((g) => state.results[g.id]).filter(Boolean).map(stripLinks).join("\n\n");
     if (!text) return;
     if (navigator.share) {
       try {
