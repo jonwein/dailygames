@@ -19,6 +19,7 @@
     --accent-ink: #ffffff;
     --done: #2b8a3e;
     --done-soft: #e6f4ea;
+    --danger: #e03131;
     --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 6px 20px rgba(0, 0, 0, .04);
   }
   @media (prefers-color-scheme: dark) {
@@ -32,6 +33,7 @@
       --accent-ink: #1a1208;
       --done: #69db7c;
       --done-soft: #1f3324;
+      --danger: #ff6b6b;
       --shadow: none;
     }
   }
@@ -51,9 +53,19 @@
     padding: calc(env(safe-area-inset-top) + 28px) 16px calc(env(safe-area-inset-bottom) + 120px);
   }
 
-  header { margin-bottom: 20px; }
+  header { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; }
   .date { margin-top: 4px; color: var(--muted); font-size: 15px; }
+  .link-btn {
+    flex: none;
+    margin-top: 2px;
+    padding: 6px 2px 6px 12px;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+  }
 
   .games { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .game {
@@ -113,7 +125,56 @@
   }
   .game.done .remove { display: block; }
 
+  .game.edit-row { padding: 6px 6px 6px 16px; gap: 4px; }
+  .game.edit-row .meta { padding: 8px 0; }
+  .icon {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ink);
+  }
+  .icon svg { width: 20px; height: 20px; }
+  .icon:disabled { opacity: .2; }
+  .icon.danger { color: var(--danger); }
+  .icon:active { background: var(--line); }
+
+  .empty { margin: 8px 4px; color: var(--muted); }
+
   .hint { margin: 18px 4px 0; color: var(--muted); font-size: 14px; }
+
+  .editor { display: none; margin-top: 28px; }
+  .editing .editor { display: block; }
+  .editing .bar, .editing .hint { display: none; }
+  .editor h2 { margin: 0 0 10px 4px; font-size: 17px; }
+  .add-form { display: grid; gap: 8px; }
+  .add-form input {
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 16px;
+  }
+  .add-form .btn { min-height: 48px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .chip {
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+  }
+  .editor .note { margin: 22px 4px 0; color: var(--muted); font-size: 14px; }
 
   .bar {
     position: fixed;
@@ -163,6 +224,7 @@
     transition: opacity .2s, transform .2s;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .editing .toast { bottom: calc(env(safe-area-inset-bottom) + 24px); }
 
   dialog {
     width: min(100% - 32px, 420px);
@@ -204,13 +266,28 @@
 <body>
 <main>
   <header>
-    <h1>Daily Games</h1>
-    <div class="date" id="date"></div>
+    <div>
+      <h1>Daily Games</h1>
+      <div class="date" id="date"></div>
+    </div>
+    <button class="link-btn" id="edit" type="button">Edit</button>
   </header>
 
   <ul class="games" id="games"></ul>
+  <p class="empty" id="empty" hidden>No games yet. Tap Edit to add some.</p>
 
   <p class="hint">Play a game, tap its Share button (if a share sheet pops up, tap Copy), then come back here and tap Paste.</p>
+
+  <section class="editor">
+    <h2>Add a game</h2>
+    <form class="add-form" id="add-form">
+      <input id="add-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Link, like wordle.com" required>
+      <input id="add-name" type="text" autocorrect="off" placeholder="Name (optional)">
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <div class="chips" id="suggestions"></div>
+    <p class="note">Your list is saved on this phone only. Results go into the message in this order.</p>
+  </section>
 </main>
 
 <div class="bar">
@@ -239,15 +316,43 @@
 </dialog>
 
 <script>
-  const GAMES = [
-    { id: "perceptle", name: "Perceptle", url: "https://perceptle.com", match: /perceptle/i },
-    { id: "dailytens", name: "Daily Tens", url: "https://dailytens.com", match: /daily\s*tens/i },
-    { id: "songless", name: "Songless", url: "https://lessgames.com/songless", match: /songless/i },
-    { id: "spotle", name: "Spotle", url: "https://spotle.io", match: /spotle/i },
-    { id: "chainle", name: "Chainle", url: "https://chainle.io", match: /chainle/i },
+  // New visitors start with these. Everyone can add, remove, and reorder their own list from Edit.
+  const DEFAULT_GAMES = [
+    { id: "perceptle", name: "Perceptle", url: "https://perceptle.com" },
+    { id: "dailytens", name: "Daily Tens", url: "https://dailytens.com" },
+    { id: "songless", name: "Songless", url: "https://lessgames.com/songless" },
+    { id: "spotle", name: "Spotle", url: "https://spotle.io" },
+    { id: "chainle", name: "Chainle", url: "https://chainle.io" },
   ];
   const KEY = "dailygames:v1";
+  const GAMES_KEY = "dailygames:games:v1";
   const $ = (sel) => document.querySelector(sel);
+
+  function loadGames() {
+    try {
+      const g = JSON.parse(localStorage.getItem(GAMES_KEY));
+      if (Array.isArray(g)) return g;
+    } catch {}
+    return DEFAULT_GAMES.map((g) => ({ ...g }));
+  }
+
+  function saveGames() {
+    try { localStorage.setItem(GAMES_KEY, JSON.stringify(games)); } catch {}
+  }
+
+  // Share texts almost always include the game's name ("DailyTens #120", "Spotle.io #800"), so match on that,
+  // ignoring case and spaces between words.
+  function matcher(name) {
+    const words = name.trim().split(/\s+/).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    return new RegExp(words.join("\\s*"), "i");
+  }
+
+  // If several names match ("Tens" and "Daily Tens"), the longest one wins.
+  function detect(text) {
+    const hits = games.filter((g) => matcher(g.name).test(text)).sort((a, b) => b.name.length - a.name.length);
+    if (hits.length === 1 || (hits.length > 1 && hits[0].name.length > hits[1].name.length)) return hits[0];
+    return null;
+  }
 
   function today() {
     const d = new Date();
@@ -271,46 +376,151 @@
   }
 
   let state = load();
+  let games = loadGames();
+  let editing = false;
   let lastOpened = null;
 
   const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>';
+  const ICONS = {
+    up: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l5-5 5 5"/></svg>',
+    down: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7.5l5 5 5-5"/></svg>',
+    remove: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="currentColor"/><path d="M6 10h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+  };
+
+  function doneCount() {
+    return games.filter((g) => state.results[g.id]).length;
+  }
+
+  function playRow(g) {
+    const result = state.results[g.id];
+    const li = document.createElement("li");
+    li.className = "game" + (result ? " done" : "");
+    li.innerHTML = `
+      <a target="_blank" rel="noopener">
+        <span class="check">${CHECK}</span>
+        <span class="meta"><span class="name"></span><span class="status"></span></span>
+        <span class="cta">Play ›</span>
+      </a>
+      <button class="remove" type="button">×</button>`;
+    const a = li.querySelector("a");
+    a.href = g.url;
+    a.addEventListener("click", () => { lastOpened = g.id; });
+    li.querySelector(".name").textContent = g.name;
+    li.querySelector(".status").textContent = result ? result.split("\n")[0] : "Not played yet";
+    const remove = li.querySelector(".remove");
+    remove.setAttribute("aria-label", `Remove ${g.name} result`);
+    remove.addEventListener("click", () => {
+      delete state.results[g.id];
+      save();
+      render();
+    });
+    return li;
+  }
+
+  function editRow(g, i) {
+    const li = document.createElement("li");
+    li.className = "game edit-row";
+    li.innerHTML = `
+      <span class="meta"><span class="name"></span><span class="status"></span></span>
+      <button class="icon" type="button" data-act="up">${ICONS.up}</button>
+      <button class="icon" type="button" data-act="down">${ICONS.down}</button>
+      <button class="icon danger" type="button" data-act="remove">${ICONS.remove}</button>`;
+    li.querySelector(".name").textContent = g.name;
+    li.querySelector(".status").textContent = new URL(g.url).host.replace(/^www\./, "");
+    const [up, down, remove] = li.querySelectorAll("button");
+    up.disabled = i === 0;
+    down.disabled = i === games.length - 1;
+    up.setAttribute("aria-label", `Move ${g.name} up`);
+    down.setAttribute("aria-label", `Move ${g.name} down`);
+    remove.setAttribute("aria-label", `Remove ${g.name}`);
+    up.addEventListener("click", () => move(i, -1));
+    down.addEventListener("click", () => move(i, 1));
+    remove.addEventListener("click", () => {
+      games.splice(i, 1);
+      saveGames();
+      render();
+    });
+    return li;
+  }
+
+  function move(i, delta) {
+    const [g] = games.splice(i, 1);
+    games.splice(i + delta, 0, g);
+    saveGames();
+    render();
+  }
 
   function render() {
     $("#date").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+    document.body.classList.toggle("editing", editing);
+    $("#edit").textContent = editing ? "Done" : "Edit";
 
     const list = $("#games");
     list.textContent = "";
-    for (const g of GAMES) {
-      const result = state.results[g.id];
-      const li = document.createElement("li");
-      li.className = "game" + (result ? " done" : "");
-      li.innerHTML = `
-        <a href="${g.url}" target="_blank" rel="noopener">
-          <span class="check">${CHECK}</span>
-          <span class="meta"><span class="name"></span><span class="status"></span></span>
-          <span class="cta">Play ›</span>
-        </a>
-        <button class="remove" type="button">×</button>`;
-      li.querySelector(".name").textContent = g.name;
-      li.querySelector(".status").textContent = result ? result.split("\n")[0] : "Not played yet";
-      li.querySelector("a").addEventListener("click", () => { lastOpened = g.id; });
-      const remove = li.querySelector(".remove");
-      remove.setAttribute("aria-label", `Remove ${g.name} result`);
-      remove.addEventListener("click", () => {
-        delete state.results[g.id];
-        save();
+    games.forEach((g, i) => list.append(editing ? editRow(g, i) : playRow(g)));
+    $("#empty").hidden = games.length > 0 || editing;
+
+    // Starter games that aren't on the list can be added back with one tap.
+    const chips = $("#suggestions");
+    chips.textContent = "";
+    for (const d of DEFAULT_GAMES.filter((d) => !games.some((g) => g.id === d.id))) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = `+ ${d.name}`;
+      chip.addEventListener("click", () => {
+        games.push({ ...d });
+        saveGames();
         render();
       });
-      list.append(li);
+      chips.append(chip);
     }
 
-    const count = Object.keys(state.results).length;
+    const count = doneCount();
+    const all = games.length > 0 && count === games.length;
     const send = $("#send");
     send.disabled = count === 0;
-    send.textContent = count === GAMES.length ? "Send all" : `Send ${count}/${GAMES.length}`;
-    send.classList.toggle("secondary", count < GAMES.length);
-    $("#paste").classList.toggle("secondary", count === GAMES.length);
+    send.textContent = all ? "Send all" : `Send ${count}/${games.length}`;
+    send.classList.toggle("secondary", !all);
+    $("#paste").classList.toggle("secondary", all);
   }
+
+  $("#edit").addEventListener("click", () => {
+    editing = !editing;
+    render();
+  });
+
+  function normalizeUrl(raw) {
+    let s = raw.trim();
+    if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+    try {
+      const u = new URL(s);
+      return u.hostname.includes(".") ? u.href : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // "lessgames.com/songless" → "Songless", "chainle.io" → "Chainle"
+  function nameFromUrl(href) {
+    const u = new URL(href);
+    const seg = u.pathname.split("/").filter((s) => s && !/^index\.\w+$/i.test(s)).pop();
+    const base = (seg || u.hostname.replace(/^www\./, "").split(".")[0]).replace(/\.\w+$/, "");
+    return base.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  $("#add-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const url = normalizeUrl($("#add-url").value);
+    if (!url) return toast("That link doesn't look right.");
+    const name = $("#add-name").value.trim() || nameFromUrl(url);
+    if (games.some((g) => g.name.toLowerCase() === name.toLowerCase())) return toast(`${name} is already on your list.`);
+    games.push({ id: "g" + Date.now().toString(36), name, url });
+    saveGames();
+    e.target.reset();
+    render();
+    toast(`Added ${name}`);
+  });
 
   let toastTimer;
   function toast(msg) {
@@ -326,7 +536,7 @@
     state.results[game.id] = text;
     save();
     render();
-    const left = GAMES.length - Object.keys(state.results).length;
+    const left = games.length - doneCount();
     toast(`${replaced ? "Updated" : "Added"} ${game.name}` + (left ? ` · ${left} to go` : " · all done!"));
   }
 
@@ -336,17 +546,18 @@
     if (Object.values(state.results).includes(text)) return toast("Already added. Tap Share in the next game first.");
     if (state.stale.includes(text)) return toast("That's an old result. Tap Share in the game first.");
 
-    const hits = GAMES.filter((g) => g.match.test(text));
-    if (hits.length === 1) return add(hits[0], text);
+    const game = detect(text);
+    if (game) return add(game, text);
     pickGame(text);
   }
 
   function pickGame(text) {
+    if (!games.length) return toast("Add a game first. Tap Edit.");
     const dlg = $("#pick");
     $("#pick-preview").textContent = text;
     const choices = $("#pick-choices");
     choices.textContent = "";
-    const ordered = [...GAMES].sort((a, b) => (b.id === lastOpened) - (a.id === lastOpened));
+    const ordered = [...games].sort((a, b) => (b.id === lastOpened) - (a.id === lastOpened));
     for (const g of ordered) {
       const btn = document.createElement("button");
       btn.type = "button";
@@ -383,7 +594,7 @@
   }
 
   $("#send").addEventListener("click", async () => {
-    const text = GAMES.map((g) => state.results[g.id]).filter(Boolean).join("\n\n");
+    const text = games.map((g) => state.results[g.id]).filter(Boolean).join("\n\n");
     if (!text) return;
     if (navigator.share) {
       try {
