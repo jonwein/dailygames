@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily Games</title>
+<meta name="apple-mobile-web-app-title" content="Daily Games">
+<meta name="theme-color" content="#f6f3ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16151a" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root {
+    --bg: #f6f3ee;
+    --surface: #ffffff;
+    --ink: #1d1b20;
+    --muted: #6f6a72;
+    --line: #e6e1d9;
+    --accent: #e8590c;
+    --accent-ink: #ffffff;
+    --done: #2b8a3e;
+    --done-soft: #e6f4ea;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 6px 20px rgba(0, 0, 0, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16151a;
+      --surface: #222128;
+      --ink: #f2eff5;
+      --muted: #a19ca8;
+      --line: #34323b;
+      --accent: #ff7a2f;
+      --accent-ink: #1a1208;
+      --done: #69db7c;
+      --done-soft: #1f3324;
+      --shadow: none;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 28px) 16px calc(env(safe-area-inset-bottom) + 120px);
+  }
+
+  header { margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; }
+  .date { margin-top: 4px; color: var(--muted); font-size: 15px; }
+
+  .games { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .game {
+    display: flex;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .game a {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px 14px 16px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .game a:active { background: var(--line); }
+  .check {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    display: grid;
+    place-items: center;
+  }
+  .check svg { width: 14px; height: 14px; opacity: 0; }
+  .game.done .check { background: var(--done); border-color: var(--done); color: var(--surface); }
+  .game.done .check svg { opacity: 1; }
+  .meta { flex: 1; min-width: 0; display: grid; }
+  .name { font-weight: 600; }
+  .status {
+    color: var(--muted);
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cta { flex: none; color: var(--accent); font-weight: 600; font-size: 15px; }
+  .game.done .cta { display: none; }
+  .remove {
+    display: none;
+    flex: none;
+    align-self: stretch;
+    width: 48px;
+    border: 0;
+    border-left: 1px solid var(--line);
+    background: none;
+    color: var(--muted);
+    font-size: 22px;
+    line-height: 1;
+  }
+  .game.done .remove { display: block; }
+
+  .hint { margin: 18px 4px 0; color: var(--muted); font-size: 14px; }
+
+  .bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--line);
+  }
+  .bar-inner { max-width: 520px; margin: 0 auto; display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    min-height: 52px;
+    border-radius: 14px;
+    border: 0;
+    font: inherit;
+    font-weight: 600;
+    color: var(--accent-ink);
+    background: var(--accent);
+  }
+  .btn:active { transform: scale(.98); }
+  .btn.secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+  .btn:disabled { opacity: .45; }
+  .btn.nudge { animation: nudge .9s ease-in-out 2; }
+  @keyframes nudge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom) + 92px);
+    transform: translate(-50%, 8px);
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--ink);
+    color: var(--bg);
+    font-size: 15px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  dialog {
+    width: min(100% - 32px, 420px);
+    padding: 20px;
+    border: 0;
+    border-radius: 20px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .4); }
+  dialog h2 { margin: 0 0 10px; font-size: 19px; }
+  dialog pre {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    max-height: 30vh;
+    overflow: auto;
+    border-radius: 10px;
+    background: var(--bg);
+    font: 13px/1.4 ui-monospace, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  dialog textarea {
+    width: 100%;
+    min-height: 140px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.4 ui-monospace, Menlo, monospace;
+  }
+  .choices { display: grid; gap: 8px; margin-bottom: 8px; }
+  .choices .btn, dialog .actions .btn { min-height: 46px; }
+  dialog .actions { display: flex; gap: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Daily Games</h1>
+    <div class="date" id="date"></div>
+  </header>
+
+  <ul class="games" id="games"></ul>
+
+  <p class="hint">Play a game, tap its Share button (if a share sheet pops up, tap Copy), then come back here and tap Paste.</p>
+</main>
+
+<div class="bar">
+  <div class="bar-inner">
+    <button class="btn" id="paste" type="button">Paste result</button>
+    <button class="btn secondary" id="send" type="button">Send</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog id="pick">
+  <h2>Which game is this?</h2>
+  <pre id="pick-preview"></pre>
+  <div class="choices" id="pick-choices"></div>
+  <button class="btn secondary" type="button" data-close style="width:100%">Cancel</button>
+</dialog>
+
+<dialog id="manual">
+  <h2>Paste your result</h2>
+  <textarea id="manual-text" placeholder="Tap here, then Paste"></textarea>
+  <div class="actions">
+    <button class="btn secondary" type="button" data-close>Cancel</button>
+    <button class="btn" type="button" id="manual-add">Add</button>
+  </div>
+</dialog>
+
+<script>
+  const GAMES = [
+    { id: "perceptle", name: "Perceptle", url: "https://perceptle.com", match: /perceptle/i },
+    { id: "dailytens", name: "Daily Tens", url: "https://dailytens.com", match: /daily\s*tens/i },
+    { id: "songless", name: "Songless", url: "https://lessgames.com/songless", match: /songless/i },
+    { id: "spotle", name: "Spotle", url: "https://spotle.io", match: /spotle/i },
+    { id: "chainle", name: "Chainle", url: "https://chainle.io", match: /chainle/i },
+  ];
+  const KEY = "dailygames:v1";
+  const $ = (sel) => document.querySelector(sel);
+
+  function today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  // Results from a previous day are kept in `stale` so we can catch an old result still sitting on the clipboard.
+  function rollover(s) {
+    return { date: today(), results: {}, stale: Object.values(s.results || {}) };
+  }
+
+  function load() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY)); } catch {}
+    if (!s || typeof s !== "object" || !s.results) return { date: today(), results: {}, stale: [] };
+    return s.date === today() ? s : rollover(s);
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }
+
+  let state = load();
+  let lastOpened = null;
+
+  const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>';
+
+  function render() {
+    $("#date").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+    const list = $("#games");
+    list.textContent = "";
+    for (const g of GAMES) {
+      const result = state.results[g.id];
+      const li = document.createElement("li");
+      li.className = "game" + (result ? " done" : "");
+      li.innerHTML = `
+        <a href="${g.url}" target="_blank" rel="noopener">
+          <span class="check">${CHECK}</span>
+          <span class="meta"><span class="name"></span><span class="status"></span></span>
+          <span class="cta">Play ›</span>
+        </a>
+        <button class="remove" type="button">×</button>`;
+      li.querySelector(".name").textContent = g.name;
+      li.querySelector(".status").textContent = result ? result.split("\n")[0] : "Not played yet";
+      li.querySelector("a").addEventListener("click", () => { lastOpened = g.id; });
+      const remove = li.querySelector(".remove");
+      remove.setAttribute("aria-label", `Remove ${g.name} result`);
+      remove.addEventListener("click", () => {
+        delete state.results[g.id];
+        save();
+        render();
+      });
+      list.append(li);
+    }
+
+    const count = Object.keys(state.results).length;
+    const send = $("#send");
+    send.disabled = count === 0;
+    send.textContent = count === GAMES.length ? "Send all" : `Send ${count}/${GAMES.length}`;
+    send.classList.toggle("secondary", count < GAMES.length);
+    $("#paste").classList.toggle("secondary", count === GAMES.length);
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = $("#toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  }
+
+  function add(game, text) {
+    const replaced = Boolean(state.results[game.id]);
+    state.results[game.id] = text;
+    save();
+    render();
+    const left = GAMES.length - Object.keys(state.results).length;
+    toast(`${replaced ? "Updated" : "Added"} ${game.name}` + (left ? ` · ${left} to go` : " · all done!"));
+  }
+
+  function handleText(raw) {
+    const text = (raw || "").replace(/\r\n?/g, "\n").trim();
+    if (!text) return toast("Clipboard is empty. Tap Share in the game first.");
+    if (Object.values(state.results).includes(text)) return toast("Already added. Tap Share in the next game first.");
+    if (state.stale.includes(text)) return toast("That's an old result. Tap Share in the game first.");
+
+    const hits = GAMES.filter((g) => g.match.test(text));
+    if (hits.length === 1) return add(hits[0], text);
+    pickGame(text);
+  }
+
+  function pickGame(text) {
+    const dlg = $("#pick");
+    $("#pick-preview").textContent = text;
+    const choices = $("#pick-choices");
+    choices.textContent = "";
+    const ordered = [...GAMES].sort((a, b) => (b.id === lastOpened) - (a.id === lastOpened));
+    for (const g of ordered) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn" + (g.id === lastOpened ? "" : " secondary");
+      btn.textContent = g.name;
+      btn.addEventListener("click", () => { dlg.close(); add(g, text); });
+      choices.append(btn);
+    }
+    dlg.showModal();
+  }
+
+  $("#paste").addEventListener("click", async () => {
+    if (!navigator.clipboard?.readText) return openManual();
+    try {
+      handleText(await navigator.clipboard.readText());
+    } catch {
+      openManual();
+    }
+  });
+
+  function openManual() {
+    const ta = $("#manual-text");
+    ta.value = "";
+    $("#manual").showModal();
+    ta.focus();
+  }
+  $("#manual-add").addEventListener("click", () => {
+    $("#manual").close();
+    handleText($("#manual-text").value);
+  });
+
+  for (const btn of document.querySelectorAll("[data-close]")) {
+    btn.addEventListener("click", () => btn.closest("dialog").close());
+  }
+
+  $("#send").addEventListener("click", async () => {
+    const text = GAMES.map((g) => state.results[g.id]).filter(Boolean).join("\n\n");
+    if (!text) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        if (e.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Copied. Paste it into Messages.");
+    } catch {
+      toast("Couldn't copy the message.");
+    }
+  });
+
+  // Coming back from a game: reset if the day changed, and nudge the Paste button.
+  function onReturn() {
+    if (document.visibilityState !== "visible") return;
+    if (state.date !== today()) {
+      state = rollover(state);
+      save();
+    }
+    render();
+    if (lastOpened && !state.results[lastOpened]) {
+      const paste = $("#paste");
+      paste.classList.remove("nudge");
+      void paste.offsetWidth;
+      paste.classList.add("nudge");
+    }
+  }
+  document.addEventListener("visibilitychange", onReturn);
+  window.addEventListener("pageshow", onReturn);
+
+  render();
+</script>
+</body>
+</html>
