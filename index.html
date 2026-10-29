@@ -283,7 +283,7 @@
   <ul class="games" id="games"></ul>
   <p class="empty" id="empty" hidden>No games yet. Tap Edit to add some.</p>
 
-  <p class="hint">Play a game, tap its Share button (if a share sheet pops up, tap Copy), then come back here and tap Paste.</p>
+  <p class="hint">Play a game, tap its Share button (if a share sheet pops up, tap Copy), then hit Back and tap Paste.</p>
 
   <section class="editor">
     <h2>Add a game</h2>
@@ -334,6 +334,7 @@
   ];
   const KEY = "dailygames:v1";
   const GAMES_KEY = "dailygames:games:v1";
+  const OPENED_KEY = "dailygames:opened";
   const $ = (sel) => document.querySelector(sel);
 
   function loadGames() {
@@ -394,7 +395,9 @@
   let state = load();
   let games = loadGames();
   let editing = false;
+  // Games open in this tab, so coming Back can reload the page. Remember which one was opened for this tab.
   let lastOpened = null;
+  try { lastOpened = sessionStorage.getItem(OPENED_KEY); } catch {}
 
   const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>';
   const ICONS = {
@@ -412,7 +415,7 @@
     const li = document.createElement("li");
     li.className = "game" + (result ? " done" : "");
     li.innerHTML = `
-      <a target="_blank" rel="noopener">
+      <a>
         <span class="check">${CHECK}</span>
         <span class="meta"><span class="name"></span><span class="status"></span></span>
         <span class="cta">Play ›</span>
@@ -420,7 +423,10 @@
       <button class="remove" type="button">×</button>`;
     const a = li.querySelector("a");
     a.href = g.url;
-    a.addEventListener("click", () => { lastOpened = g.id; });
+    a.addEventListener("click", () => {
+      lastOpened = g.id;
+      try { sessionStorage.setItem(OPENED_KEY, g.id); } catch {}
+    });
     li.querySelector(".name").textContent = g.name;
     li.querySelector(".status").textContent = result ? result.split("\n")[0] : "Not played yet";
     const remove = li.querySelector(".remove");
