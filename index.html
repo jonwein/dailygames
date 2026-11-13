@@ -132,8 +132,19 @@
   }
   .game.done .remove { display: block; }
 
-  .game.edit-row { padding: 6px 6px 6px 16px; gap: 4px; }
-  .game.edit-row .meta { padding: 8px 0; }
+  .game.edit-row { padding: 6px 6px 6px 0; gap: 4px; }
+  .edit-open {
+    align-self: stretch;
+    padding: 8px 4px 8px 16px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    align-content: center;
+  }
+  .edit-open:active { opacity: .6; }
+  .pencil { width: 14px; height: 14px; margin-left: 6px; color: var(--muted); vertical-align: -1px; }
   .icon {
     flex: none;
     width: 44px;
@@ -285,6 +296,20 @@
     font-size: 16px;
   }
   .new-game .btn { flex: none; min-height: 46px; padding: 0 20px; }
+  .edit-form { display: grid; }
+  .edit-form input {
+    width: 100%;
+    min-height: 46px;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px;
+  }
+  .edit-form .error { margin: -6px 2px 14px; color: var(--danger); font-size: 14px; }
 
   .toast.has-action { display: flex; align-items: center; gap: 12px; text-align: left; }
   .toast.show.has-action { pointer-events: auto; }
@@ -323,7 +348,7 @@
       <button class="btn" type="submit">Add</button>
     </form>
     <div class="chips" id="suggestions"></div>
-    <p class="note">Your list is saved on this phone only. Results go into the message in this order.</p>
+    <p class="note">Tap a game to change its name or link. Your list is saved on this phone only. Results go into the message in this order.</p>
   </section>
 </main>
 
@@ -351,6 +376,21 @@
     <div class="choices" id="pick-choices"></div>
   </div>
   <button class="btn secondary" type="button" data-close style="width:100%">Cancel</button>
+</dialog>
+
+<dialog id="edit-game">
+  <h2 tabindex="-1" autofocus>Edit game</h2>
+  <form class="edit-form" id="edit-form" novalidate>
+    <label class="label" for="edit-name">Name</label>
+    <input id="edit-name" type="text" autocorrect="off" autocapitalize="words" enterkeyhint="next">
+    <label class="label" for="edit-url">Link</label>
+    <input id="edit-url" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="None · Play searches for it">
+    <p class="error" id="edit-error" role="alert" hidden></p>
+    <div class="actions">
+      <button class="btn secondary" type="button" data-close>Cancel</button>
+      <button class="btn" type="submit">Save</button>
+    </div>
+  </form>
 </dialog>
 
 <dialog id="manual">
@@ -421,6 +461,7 @@
 
   const SEARCH = "https://www.google.com/search?q=";
   const isSearch = (href) => href.startsWith(SEARCH);
+  const searchUrl = (name) => SEARCH + encodeURIComponent(name + " game");
   const site = (u) => u.hostname.replace(/^www\./i, "").toLowerCase();
   function parseUrl(href) {
     try { return new URL(href); } catch { return null; }
@@ -470,7 +511,7 @@
   function urlFor(name, link) {
     const known = KNOWN_LINKS[name.toLowerCase()];
     if (known && (!link || site(new URL(known)) === site(new URL(link)))) return known;
-    return link || known || SEARCH + encodeURIComponent(name + " game");
+    return link || known || searchUrl(name);
   }
 
   // Words that start a first line without naming a game: dates ("🌎 Mar 5, 2024"), "Puzzle #12", "Today's".
@@ -550,6 +591,7 @@
     up: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l5-5 5 5"/></svg>',
     down: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7.5l5 5 5-5"/></svg>',
     remove: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="currentColor"/><path d="M6 10h8" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>',
+    edit: '<svg class="pencil" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 3.5l3 3L7 16H4v-3z"/></svg>',
   };
 
   function doneCount() {
@@ -589,18 +631,20 @@
     const li = document.createElement("li");
     li.className = "game edit-row";
     li.innerHTML = `
-      <span class="meta"><span class="name"></span><span class="status"></span></span>
+      <button class="meta edit-open" type="button" data-act="edit"><span class="name"><span></span>${ICONS.edit}</span><span class="status"></span></button>
       <button class="icon" type="button" data-act="up">${ICONS.up}</button>
       <button class="icon" type="button" data-act="down">${ICONS.down}</button>
       <button class="icon danger" type="button" data-act="remove">${ICONS.remove}</button>`;
-    li.querySelector(".name").textContent = g.name;
+    li.querySelector(".name span").textContent = g.name;
     li.querySelector(".status").textContent = isSearch(g.url) ? "No link · Play searches for it" : new URL(g.url).host.replace(/^www\./, "");
-    const [up, down, remove] = li.querySelectorAll("button");
+    const [open, up, down, remove] = li.querySelectorAll("button");
     up.disabled = i === 0;
     down.disabled = i === games.length - 1;
+    open.setAttribute("aria-label", `Edit ${g.name}`);
     up.setAttribute("aria-label", `Move ${g.name} up`);
     down.setAttribute("aria-label", `Move ${g.name} down`);
     remove.setAttribute("aria-label", `Remove ${g.name}`);
+    open.addEventListener("click", () => openGameEditor(g));
     up.addEventListener("click", () => move(i, -1));
     down.addEventListener("click", () => move(i, 1));
     remove.addEventListener("click", () => {
@@ -691,6 +735,44 @@
     e.target.reset();
     render();
     toast(`Added ${name}`);
+  });
+
+  // Change a listed game's name or link. An empty link means Play searches for the game.
+  let editingGame = null;
+  function openGameEditor(g) {
+    editingGame = g;
+    $("#edit-name").value = g.name;
+    $("#edit-url").value = isSearch(g.url) ? "" : g.url;
+    $("#edit-error").hidden = true;
+    $("#edit-game").showModal();
+  }
+
+  $("#edit-form").addEventListener("input", () => { $("#edit-error").hidden = true; });
+
+  $("#edit-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const g = editingGame;
+    const fail = (msg, field) => {
+      $("#edit-error").textContent = msg;
+      $("#edit-error").hidden = false;
+      $(field).focus();
+    };
+    const name = $("#edit-name").value.trim().replace(/\s+/g, " ");
+    if (!name) return fail("Give it a name.", "#edit-name");
+    if (games.some((o) => o !== g && o.name.toLowerCase() === name.toLowerCase())) return fail(`${name} is already on your list.`, "#edit-name");
+    const raw = $("#edit-url").value.trim();
+    const url = !raw ? searchUrl(name) : raw === g.url ? g.url : normalizeUrl(raw);
+    if (!url) return fail("That link doesn't look right.", "#edit-url");
+
+    // Results are matched by name, so a renamed game keeps answering to its old one ("Krillion" results still
+    // count after renaming it "Krill"), unless it already knows the name its results use.
+    if (name.toLowerCase() !== g.name.toLowerCase() && !g.alias) g.alias = g.name;
+    if (g.alias && g.alias.toLowerCase() === name.toLowerCase()) delete g.alias;
+    g.name = name;
+    g.url = url;
+    saveGames();
+    $("#edit-game").close();
+    render();
   });
 
   let toastTimer;
