@@ -409,8 +409,8 @@
     { id: "dailytens", name: "Daily Tens", url: "https://dailytens.com" },
     { id: "songless", name: "Songless", url: "https://lessgames.com/songless" },
     { id: "spotle", name: "Spotle", url: "https://spotle.io" },
-    { id: "chainle", name: "Chainle", url: "https://chainle.io" },
     { id: "krillion", name: "Krillion", url: "https://krillion.io" },
+    { id: "nytmini", name: "NYT Mini", alias: "Mini", url: "https://www.nytimes.com/crosswords/game/mini" },
   ];
   const KEY = "dailygames:v1";
   const GAMES_KEY = "dailygames:games:v1";
@@ -420,9 +420,16 @@
   function loadGames() {
     try {
       const g = JSON.parse(localStorage.getItem(GAMES_KEY));
-      if (Array.isArray(g)) return g.filter((x) => x && typeof x.name === "string" && x.name.trim() && typeof x.url === "string");
+      if (Array.isArray(g)) return g.filter((x) => x && typeof x.name === "string" && x.name.trim() && typeof x.url === "string").map(fixLink);
     } catch {}
     return DEFAULT_GAMES.map((g) => ({ ...g }));
+  }
+
+  // nytimes.com/games/crossword doesn't exist, but Crossword results used to get added with it. Point those
+  // at the real page.
+  function fixLink(g) {
+    if (/^https?:\/\/(?:www\.)?nytimes\.com\/games\/crossword(?:[/?#]|$)/i.test(g.url)) g.url = KNOWN_LINKS.crossword;
+    return g;
   }
 
   function saveGames() {
@@ -503,6 +510,9 @@
     wordle: "https://www.nytimes.com/games/wordle/index.html",
     connections: "https://www.nytimes.com/games/connections",
     strands: "https://www.nytimes.com/games/strands",
+    crossword: "https://www.nytimes.com/crosswords/game/daily",
+    "daily crossword": "https://www.nytimes.com/crosswords/game/daily",
+    "nyt crossword": "https://www.nytimes.com/crosswords/game/daily",
     mini: "https://www.nytimes.com/crosswords/game/mini",
     "mini crossword": "https://www.nytimes.com/crosswords/game/mini",
     pips: "https://www.nytimes.com/games/pips",
@@ -675,7 +685,8 @@
     // Starter games that aren't on the list can be added back with one tap.
     const chips = $("#suggestions");
     chips.textContent = "";
-    const onList = (d) => games.some((g) => g.id === d.id || g.name.toLowerCase() === d.name.toLowerCase());
+    const same = (a, b) => namesOf(a).some((n) => namesOf(b).some((m) => m.toLowerCase() === n.toLowerCase()));
+    const onList = (d) => games.some((g) => g.id === d.id || same(g, d));
     for (const d of DEFAULT_GAMES.filter((d) => !onList(d))) {
       const chip = document.createElement("button");
       chip.type = "button";
